@@ -2,6 +2,7 @@ package com.skarm.launcher
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Process
 
 /**
  * The Java heap cap, shared by the launcher's setting UI and the JVM launch.
@@ -21,9 +22,11 @@ object RamSettings {
     fun maxMb(context: Context): Int {
         val info = ActivityManager.MemoryInfo()
         activityManager(context).getMemoryInfo(info)
-        val half = (info.totalMem / (1024 * 1024) / 2).toInt()
-        return (half / STEP_MB * STEP_MB).coerceIn(MIN_MB, 4096)
+        return heapLimitMb((info.totalMem / (1024 * 1024)).toInt(), Process.is64Bit())
     }
+
+    internal fun heapLimitMb(totalMb: Int, is64Bit: Boolean): Int =
+        (totalMb / 2 / STEP_MB * STEP_MB).coerceIn(MIN_MB, if (is64Bit) 4096 else 1024)
 
     fun totalMb(context: Context): Int {
         val info = ActivityManager.MemoryInfo()
@@ -39,7 +42,8 @@ object RamSettings {
 
     fun get(context: Context): Int {
         val prefs = context.getSharedPreferences("launcher_prefs", Context.MODE_PRIVATE)
-        return prefs.getInt(KEY, DEFAULT_MB).coerceIn(MIN_MB, maxMb(context))
+        val defaultMb = if (Process.is64Bit()) DEFAULT_MB else MIN_MB
+        return prefs.getInt(KEY, defaultMb).coerceIn(MIN_MB, maxMb(context))
     }
 
     fun set(context: Context, mb: Int) {

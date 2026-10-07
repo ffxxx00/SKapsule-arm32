@@ -57,7 +57,27 @@ Later releases install themselves: when a newer version is published the launche
 installer (grant "install unknown apps" once when prompted). The dialog also offers release
 notes and a **Skip this version** option.
 
-Only `arm64-v8a` devices are supported (no 32-bit builds).
+Upstream releases support only `arm64-v8a` devices.
+
+This fork also includes an experimental `armeabi-v7a` build for Android systems
+that run apps in 32-bit mode, including on a 64-bit CPU. Device gameplay testing
+is still required; ARM32 support is not yet verified on a Galaxy A13. The ARM32
+build uses a matched FCL Java 25.0.3 runtime, a 512 MB default heap (1 GB maximum),
+and disables the upstream ARM64-only APK updater.
+
+To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
+`LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
+`LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with
+`./gradlew -PskAbi=armeabi-v7a :app:assembleDebug :app:testDebugUnitTest` from
+`launcher/`. The default build remains ARM64. CI builds each ABI separately;
+the ARM32 APK is a workflow artifact, not an upstream release asset.
+
+The first experimental Windows build uses the ARM32 native bundle from
+[FCL commit 7de9a77](https://github.com/FCL-Team/FoldCraftLauncher/tree/7de9a7742ea384dd0998ec004da41361ae6596f8),
+with LWJGL Java modules compiled from this repository's pinned submodule.
+Its 1,891 core and 2,236 Android OpenGL JNI exports match the source bindings.
+gl4es, OpenAL, caciocavallo, frenchpress and the launcher are built from source.
+CI uses the existing LWJGL native build script instead of that prebuilt bundle.
 
 ---
 

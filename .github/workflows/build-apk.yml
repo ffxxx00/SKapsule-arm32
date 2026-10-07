@@ -24,11 +24,20 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - abi: arm64-v8a
+            arch: arm64
+          - abi: armeabi-v7a
+            arch: arm32
     env:
       # Must match launcher/app/build.gradle.kts ndkVersion + cmake version.
       # NDK 30 (Clang 20): NDK 27's Clang 18 miscompiles openal-soft's C++20 ranges.
       NDK_VERSION: "30.0.14904198"
       CMAKE_VERSION: "3.22.1"
+      ABIS: ${{ matrix.abi }}
+      LWJGL_BUILD_ARCH: ${{ matrix.arch }}
 
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +75,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: out
-          key: native-${{ runner.os }}-ndk${{ env.NDK_VERSION }}-${{ steps.submods.outputs.sha }}-${{ hashFiles('scripts/build-*.sh') }}
+          key: native-${{ runner.os }}-${{ matrix.abi }}-ndk${{ env.NDK_VERSION }}-${{ steps.submods.outputs.sha }}-${{ hashFiles('scripts/build-*.sh') }}
 
       - name: Build native submodules (cache miss only)
         if: steps.cache-out.outputs.cache-hit != 'true'
@@ -84,6 +93,9 @@ jobs:
 
       - name: Stage assets into the launcher
         run: ./scripts/stage-launcher-assets.sh
+      - name: Stage ARM32 Java runtime
+        if: matrix.arch == 'arm32'
+        run: bash ./scripts/stage-arm32-jre.sh
 
       # Decode the keystore from the secret if present; otherwise leave SK_KEYSTORE_FILE
       # empty and the build produces an unsigned APK.
@@ -123,12 +135,12 @@ jobs:
           SK_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           SK_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           SK_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew -PskAbi=${{ matrix.abi }} :app:assembleRelease :app:testDebugUnitTest
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: skapsule-release-apk
+          name: skapsule-release-apk-${{ matrix.arch }}
           path: launcher/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
@@ -137,9 +149,9 @@ jobs:
       # present). A tag without secrets still uploads the workflow artifact above, but
       # won't publish an unsigned APK as a public Release.
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outputs.file != ''
+        if: matrix.arch == 'arm64' && startsWith(github.ref, 'refs/tags/v') && steps.keystore.outputs.file != ''
         uses: softprops/action-gh-release@v2
         with:
-          files: launcher/app/build/outputs/apk/release/skapsule-v${{ steps.version.outputs.VERSION }}.apk
+          files: launcher/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
           fail_on_unmatched_files: true

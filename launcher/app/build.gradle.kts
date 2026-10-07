@@ -27,6 +27,8 @@ val hasReleaseSigning = ksStoreFile != null && ksStorePass != null &&
 // CI/publish via the SK_VERSION_CODE env var (CI passes github.run_number); local dev
 // builds default to 1.
 val skVersionCode = System.getenv("SK_VERSION_CODE")?.toIntOrNull() ?: 1
+val skAbi = providers.gradleProperty("skAbi").getOrElse("arm64-v8a")
+require(skAbi in listOf("arm64-v8a", "armeabi-v7a")) { "Unsupported skAbi: $skAbi" }
 
 // versionName derives from the latest reachable git tag (v1.4.0 -> "1.4.0") so it can't
 // drift from releases the way the old hard-coded string did. Override with SK_VERSION_NAME
@@ -63,8 +65,7 @@ android {
         versionName = skVersionName
 
         ndk {
-            // who even uses 32-bit
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += listOf(skAbi)
         }
 
         externalNativeBuild {
@@ -141,6 +142,11 @@ android {
     // Don't double compress
     androidResources {
         noCompress += listOf("xz", "tar")
+        ignoreAssetsPatterns += if (skAbi == "armeabi-v7a") {
+            listOf("jre25", "*-natives-arm64.zip")
+        } else {
+            listOf("jre25-arm32", "*-natives-arm32.zip")
+        }
     }
 }
 
@@ -173,7 +179,8 @@ androidComponents {
         variant.outputs.forEach { output ->
             if (variant.name == "release") {
                 val suffix = if (hasReleaseSigning) "" else "-unsigned"
-                output.outputFileName.set("skapsule-v$skVersionName$suffix.apk")
+                val archSuffix = if (skAbi == "armeabi-v7a") "-arm32" else ""
+                output.outputFileName.set("skapsule-v$skVersionName$archSuffix$suffix.apk")
             }
         }
     }

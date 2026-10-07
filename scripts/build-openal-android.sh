@@ -90,11 +90,23 @@ for ABI in "${ABIS[@]}"; do
     NDK_HOST_OS="linux-x86_64"
     if [[ "$(uname)" == "Darwin" ]]; then
         NDK_HOST_OS="darwin-x86_64"
+    elif [[ "$(uname)" == MINGW* || "$(uname)" == MSYS* ]]; then
+        NDK_HOST_OS="windows-x86_64"
     fi
     STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST_OS/bin/llvm-strip"
     if [[ -x "$STRIP" ]]; then
         "$STRIP" --strip-unneeded "$OUT_LIB_DIR/libopenal.so"
     fi
+
+    case "$ABI" in
+        arm64-v8a) STL_TARGET=aarch64-linux-android ;;
+        armeabi-v7a) STL_TARGET=arm-linux-androideabi ;;
+        x86) STL_TARGET=i686-linux-android ;;
+        x86_64) STL_TARGET=x86_64-linux-android ;;
+        *) echo "ERROR: unsupported ABI=$ABI" >&2; exit 1 ;;
+    esac
+    cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$NDK_HOST_OS/sysroot/usr/lib/$STL_TARGET/libc++_shared.so" \
+       "$OUT_LIB_DIR/libc++_shared.so"
 
     if command -v readelf >/dev/null 2>&1; then
         soname=$(readelf -d "$OUT_LIB_DIR/libopenal.so" | awk '/SONAME/ {gsub(/[\[\]]/,"",$NF); print $NF}')

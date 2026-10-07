@@ -1,6 +1,7 @@
 package com.skarm.launcher
 
 import android.content.Context
+import android.os.Process
 import android.util.Log
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
@@ -15,9 +16,13 @@ object LwjglInstaller {
     private const val TAG = "LwjglInstaller"
     private const val DIR_NAME = "lwjgl"
     private const val STAMP_NAME = ".version"
-    private const val NATIVES_ASSET = "lwjgl/lwjgl-3.4.1-android-natives-arm64.zip"
+    private val nativesAsset: String
+        get() = nativesAssetName(Process.is64Bit())
     private const val MODULES_ASSET = "lwjgl/lwjgl-3.4.1-android-modules.zip"
     private const val VERSION = "3.4.1-aam-2026-05-21"
+
+    internal fun nativesAssetName(is64Bit: Boolean): String =
+        "lwjgl/lwjgl-3.4.1-android-natives-${if (is64Bit) "arm64" else "arm32"}.zip"
 
     fun homeDir(context: Context): File = File(context.filesDir, DIR_NAME)
     fun libDir(context: Context): File = File(homeDir(context), "lib")
@@ -29,7 +34,7 @@ object LwjglInstaller {
         return stamp.readText().trim() == stampValue(context)
     }
 
-    private fun stampValue(context: Context): String = "$VERSION+${appStamp(context)}"
+    private fun stampValue(context: Context): String = "$VERSION+$nativesAsset+${appStamp(context)}"
 
     /**
      * The installed app's own version, folded into the stamp below.
@@ -63,7 +68,7 @@ object LwjglInstaller {
         jarsDir(context).mkdirs()
 
         onProgress("Unpacking LWJGL natives…")
-        extractFlatZip(context, NATIVES_ASSET, libDir(context)) { name ->
+        extractFlatZip(context, nativesAsset, libDir(context)) { name ->
             if (name.endsWith(".so")) name.substringAfterLast('/') else null
         }
 

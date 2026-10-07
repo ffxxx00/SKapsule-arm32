@@ -1,7 +1,7 @@
 package com.skarm.launcher
 
 import android.content.Context
-import android.os.Build
+import android.os.Process
 import android.util.Log
 import androidx.core.content.pm.PackageInfoCompat
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -19,7 +19,8 @@ object JreInstaller {
     private const val TAG = "JreInstaller"
     private const val DIR_NAME = "jre25"
     private const val STAMP_NAME = ".version"
-    private const val ASSET_DIR = "jre25"
+    private val assetDir: String
+        get() = if (Process.is64Bit()) "jre25" else "jre25-arm32"
 
     fun homeDir(context: Context): File = File(context.filesDir, DIR_NAME)
 
@@ -37,7 +38,7 @@ object JreInstaller {
     }
 
     private fun stampValue(context: Context): String =
-        "${bundledVersion(context)}+${appStamp(context)}"
+        "${bundledVersion(context)}+$assetDir+${appStamp(context)}"
 
     /**
      * The installed app's own version, folded into the stamp below.
@@ -58,17 +59,10 @@ object JreInstaller {
 
 
     private fun bundledVersion(context: Context): String =
-        context.assets.open("$ASSET_DIR/version").use { it.bufferedReader().readText().trim() }
+        context.assets.open("$assetDir/version").use { it.bufferedReader().readText().trim() }
 
-    private fun archAssetName(): String {
-        // arm64-v8a only. abiFilters prevents installs on non-arm64 devices,
-        // so if we somehow get here on a different ABI, it's a real problem.
-        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
-        if (abi != "arm64-v8a") {
-            error("Unsupported ABI: $abi (only arm64-v8a is supported)")
-        }
-        return "bin-arm64.tar.xz"
-    }
+    internal fun archAssetName(is64Bit: Boolean): String =
+        if (is64Bit) "bin-arm64.tar.xz" else "bin-arm.tar.xz"
 
     /**
      * Installs (or reinstalls) the JRE. Safe to call from a background thread.
@@ -83,11 +77,11 @@ object JreInstaller {
         home.mkdirs()
 
         onProgress("Unpacking JRE base…")
-        extractAsset(context, "$ASSET_DIR/universal.tar.xz", home)
+        extractAsset(context, "$assetDir/universal.tar.xz", home)
 
-        val archAsset = archAssetName()
+        val archAsset = archAssetName(Process.is64Bit())
         onProgress("Unpacking JRE native ($archAsset)…")
-        extractAsset(context, "$ASSET_DIR/$archAsset", home)
+        extractAsset(context, "$assetDir/$archAsset", home)
 
         markExecutable(File(home, "bin"))
         markExecutable(File(home, "lib/server/libjvm.so"))

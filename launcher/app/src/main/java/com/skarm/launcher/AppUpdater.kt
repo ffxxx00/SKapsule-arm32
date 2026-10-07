@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
+import android.os.Process
 import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,8 @@ object AppUpdater {
     }
 
     suspend fun fetchLatest(context: Context): Release? = withContext(Dispatchers.IO) {
+        // Upstream releases are ARM64-only and use a different signing key.
+        if (!Process.is64Bit()) return@withContext null
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val cached = prefs.getString(KEY_CACHE_JSON, null)
         val age = System.currentTimeMillis() - prefs.getLong(KEY_CACHE_TIME, 0L)
