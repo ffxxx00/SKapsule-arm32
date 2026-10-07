@@ -339,6 +339,7 @@ static void gl4es_bring_up_once(void) {
 // --- JVM bootstrap (pthread) --------------------------------------------------
 
 typedef jint (JNICALL *JNI_CreateJavaVM_t)(JavaVM **, void **, void *);
+static atomic_bool first_frame_signaled = ATOMIC_VAR_INIT(false);
 
 JNIEXPORT void JNICALL
 Java_com_skarm_launcher_bootstrap_SkBootstrap_registerGlfwNatives(JNIEnv *env, jclass thiz,
@@ -1096,7 +1097,6 @@ static void JNICALL glfw_swap_buffers_impl(JNIEnv *env, jclass thiz, jlong windo
     // First successful frame: tell the ART boot overlay to dismiss. One-shot; the
     // overlay's own idempotency guard tolerates a stray repeat, but we gate here
     // anyway so we don't attach/call ART every frame for the rest of the session.
-    static atomic_bool first_frame_signaled = ATOMIC_VAR_INIT(false);
     if (swapped && !atomic_exchange(&first_frame_signaled, true)) {
         LOGI("first frame swapped; signaling boot-overlay dismissal");
         art_render_ready();
@@ -1150,6 +1150,54 @@ static jboolean JNICALL glfw_get_gamepad_state_impl(JNIEnv *env, jclass thiz,
     return JNI_TRUE;
 }
 
+// Capture the embedded JVM, not ART: Android's thread dump cannot show SK stacks.
+static void *dump_stalled_startup(void *arg) {
+    JavaVM *vm = arg;
+    sleep(60);
+    if (atomic_load(&first_frame_signaled)) return NULL;
+    JNIEnv *env = NULL;
+    if ((*vm)->AttachCurrentThreadAsDaemon(vm, (void **)&env, NULL) != JNI_OK) return NULL;
+    LOGI("Startup diagnostic: no game frame after 60 seconds; dumping HotSpot threads");
+    jclass factory = (*env)->FindClass(env, "java/lang/management/ManagementFactory");
+    if (!factory) goto done;
+    jmethodID get = (*env)->GetStaticMethodID(env, factory, "getThreadMXBean",
+                                            "()Ljava/lang/management/ThreadMXBean;");
+    if (!get) goto done;
+    jobject bean = (*env)->CallStaticObjectMethod(env, factory, get);
+    if ((*env)->ExceptionCheck(env) || !bean) goto done;
+    jclass beancls = (*env)->FindClass(env, "java/lang/management/ThreadMXBean");
+    if (!beancls) goto done;
+    jmethodID dump = (*env)->GetMethodID(env, beancls, "dumpAllThreads",
+                                       "(ZZ)[Ljava/lang/management/ThreadInfo;");
+    if (!dump) goto done;
+    jobjectArray threads = (*env)->CallObjectMethod(env, bean, dump, JNI_TRUE, JNI_TRUE);
+    if ((*env)->ExceptionCheck(env) || !threads) goto done;
+    jclass info = (*env)->FindClass(env, "java/lang/management/ThreadInfo");
+    if (!info) goto done;
+    jmethodID string = (*env)->GetMethodID(env, info, "toString", "()Ljava/lang/String;");
+    if (!string) goto done;
+    for (jsize i = 0; i < (*env)->GetArrayLength(env, threads); i++) {
+        jobject thread = (*env)->GetObjectArrayElement(env, threads, i);
+        if (!thread) continue;
+        jstring text = (*env)->CallObjectMethod(env, thread, string);
+        if ((*env)->ExceptionCheck(env)) goto done;
+        if (text) {
+            const char *utf = (*env)->GetStringUTFChars(env, text, NULL);
+            if (!utf) goto done;
+            LOGI("HotSpot thread:\n%s", utf);
+            (*env)->ReleaseStringUTFChars(env, text, utf);
+            (*env)->DeleteLocalRef(env, text);
+        }
+        (*env)->DeleteLocalRef(env, thread);
+    }
+done:
+    if ((*env)->ExceptionCheck(env)) {
+        log_pending_exception(env, "HotSpot startup thread dump");
+    }
+    (*vm)->DetachCurrentThread(vm);
+    return NULL;
+}
+
 JNIEXPORT void JNICALL
 Java_com_skarm_launcher_bootstrap_SkBootstrap_registerGlfwNatives(JNIEnv *env, jclass thiz,
                                                                   jclass glfwClass) {
@@ -1166,6 +1214,16 @@ Java_com_skarm_launcher_bootstrap_SkBootstrap_registerGlfwNatives(JNIEnv *env, j
         LOGE("RegisterNatives on SK GLFW failed: rc=%d", rc);
     } else {
         LOGI("RegisterNatives on SK GLFW OK (%zu methods)", sizeof(m)/sizeof(m[0]));
+        art_launch_status("Starting game…");
+#if defined(__arm__)
+        JavaVM *vm = NULL;
+        if ((*env)->GetJavaVM(env, &vm) == JNI_OK) {
+            pthread_t diagnostic;
+            int error = pthread_create(&diagnostic, NULL, dump_stalled_startup, vm);
+            if (error == 0) pthread_detach(diagnostic);
+            else LOGW("Could not start JVM diagnostic: %s", strerror(error));
+        }
+#endif
     }
 }
 
