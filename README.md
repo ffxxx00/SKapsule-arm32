@@ -65,6 +65,10 @@ is still required; ARM32 support is not yet verified on a Galaxy A13. The ARM32
 build uses a matched FCL Java 25.0.3 runtime, a 512 MB default heap (1 GB maximum),
 and disables the upstream ARM64-only APK updater.
 
+The ARM32 build replaces FCL's mismatched AArch64 AWT placeholder with a locally
+built JNI stub linked to the ARM32 headless AWT library. It omits the AArch64
+`jspawnhelper` from the common image and uses Java's `FORK` process mechanism.
+
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
 `LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with

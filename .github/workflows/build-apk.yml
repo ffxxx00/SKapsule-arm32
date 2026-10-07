@@ -137,6 +137,10 @@ jobs:
           SK_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew -PskAbi=${{ matrix.abi }} :app:assembleRelease :app:testDebugUnitTest
 
+      - name: Verify ARM32 packaged runtime
+        if: matrix.arch == 'arm32'
+        run: python3 scripts/verify-arm32-apk.py launcher/app/build/outputs/apk/release/*.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

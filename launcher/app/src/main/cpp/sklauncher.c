@@ -818,7 +818,12 @@ static void *jvm_thread_main(void *arg) {
     ADD_OPT("--add-opens=java.base/java.util=ALL-UNNAMED");
     ADD_OPT("--enable-native-access=ALL-UNNAMED");
     ADD_OPT("-XX:-CreateCoredumpOnCrash");
+#if defined(__arm__)
+    // FCL's common JRE image ships an AArch64 jspawnhelper; fork avoids it.
+    ADD_OPT("-Djdk.lang.Process.launchMechanism=FORK");
+#else
     ADD_OPT("-XX:+SuppressFatalErrorMessage");
+#endif
 
     if (cacio) {
         ADD_OPT(opt_cacio_bootcp);

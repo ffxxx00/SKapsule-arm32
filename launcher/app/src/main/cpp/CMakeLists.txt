@@ -1,6 +1,21 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(sklauncher LANGUAGES C CXX)
 
+if(ANDROID_ABI STREQUAL "armeabi-v7a")
+    set(ARM32_JRE "${CMAKE_CURRENT_BINARY_DIR}/arm32-jre")
+    file(MAKE_DIRECTORY "${ARM32_JRE}")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E tar xf
+            "${CMAKE_CURRENT_SOURCE_DIR}/../assets/jre25-arm32/bin-arm.tar.xz"
+            ./lib/libawt_headless.so
+        WORKING_DIRECTORY "${ARM32_JRE}"
+        COMMAND_ERROR_IS_FATAL ANY
+    )
+    add_library(awt_xawt SHARED xawt_fake.c)
+    target_link_options(awt_xawt PRIVATE "-Wl,--no-as-needed")
+    target_link_libraries(awt_xawt "${ARM32_JRE}/lib/libawt_headless.so")
+endif()
+
 add_library(sklauncher SHARED
     sklauncher.c
 )

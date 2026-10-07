@@ -87,6 +87,11 @@ object JreInstaller {
         markExecutable(File(home, "lib/server/libjvm.so"))
         markExecutable(File(home, "lib/jspawnhelper"))
 
+        if (!Process.is64Bit()) {
+            val source = File(context.applicationInfo.nativeLibraryDir, "libawt_xawt.so")
+            source.copyTo(File(home, "lib/libawt_xawt.so"), overwrite = true)
+        }
+
         onProgress("Staging libGL.so…")
         stageLibGL(context, home)
 
@@ -112,6 +117,8 @@ object JreInstaller {
             // Strip the leading "./" that some tar producers prepend.
             val name = entry.name.removePrefix("./").removePrefix("/")
             if (name.isEmpty()) continue
+            // These two FCL files are AArch64 even in the ARM32 runtime image.
+            if (!Process.is64Bit() && name in listOf("lib/libawt_xawt.so", "lib/jspawnhelper")) continue
 
             val target = File(into, name).canonicalFile
             if (!target.path.startsWith(rootPath)) {
