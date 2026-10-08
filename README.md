@@ -80,6 +80,9 @@ Experimental 6 combines this interpreter mode with the JNI layer selection above
 experimental 5 stalled with JIT enabled before producing a game frame, while the
 earlier interpreter trial reached an exception in LWJGL's FFM layer. Full game
 startup with the combined workaround still needs device testing.
+Experimental 7 also loads the existing frenchpress shim in ARM32 Web mode to
+avoid the game's SteamAPI FFM initializer. Web mode uses `/dev/null` as its Steam
+credential store, so saved Steam tokens cannot override the selected login mode.
 
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with

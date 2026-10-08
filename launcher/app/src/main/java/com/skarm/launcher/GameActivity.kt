@@ -713,19 +713,16 @@ class GameActivity :
             ).filter { it.isNotEmpty() }.joinToString(":")
             // Re-stage the cacio AWT bridge so a rebuilt jar always propagates.
             val cacioDir = CacioInstaller.stage(this).absolutePath
-            // Activate frenchpress (Steam-login shim) only in Steam mode. An explicit
-            // Play(Web) must do web login even if a Steam refresh token is stored on
-            // disk — and frenchpress's CredentialStore token has priority over the
-            // empty-username web fallback, so it would re-use the token if loaded. Not
-            // putting it on the classpath for Web sidesteps that, non-destructively
-            // (the token is preserved for the next Play(Steam)).
+            // ARM32 also needs the shim in Web mode: the game's SteamAPI static
+            // initializer requires an unavailable FFM linker even with Steam disabled.
+            // An empty credential store prevents a saved Steam token overriding Web.
             val steam = loginMode == LauncherActivity.LoginMode.Steam
             val frenchpressJar: String
             val credFile: String
-            if (steam) {
+            if (steam || !Process.is64Bit()) {
                 FrenchpressInstaller.stage(this) // re-stage so a rebuilt jar propagates
                 frenchpressJar = FrenchpressInstaller.jar(this).absolutePath
-                credFile = FrenchpressInstaller.credFile(this).absolutePath
+                credFile = if (steam) FrenchpressInstaller.credFile(this).absolutePath else "/dev/null"
             } else {
                 frenchpressJar = ""
                 credFile = ""

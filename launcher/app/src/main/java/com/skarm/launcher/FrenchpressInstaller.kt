@@ -10,11 +10,9 @@ import java.io.File
  * (SkBootstrap, via -Dfrenchpress.jar) so its SteamAPI/froth classes shadow the
  * froth-foamy ones bundled in SK.
  *
- * frenchpress is activated only in Steam mode (GameActivity passes its jar path then,
- * via -Dfrenchpress.jar). Web mode runs WITHOUT it on the classpath, so an explicit
- * Play(Web) always does web login even when a Steam refresh token is stored on disk —
- * frenchpress's stored token has priority over the empty-username web fallback, so
- * loading it for Web would silently re-use Steam. The jar is still staged on first use.
+ * Activated in Steam mode and ARM32 Web mode via -Dfrenchpress.jar. ARM32 needs
+ * the shim to bypass froth's FFM initializer. Web uses an empty credential store
+ * so a stored Steam token cannot override the selected mode. ARM64 Web omits it.
  *
  * Built from the frenchpress submodule via scripts/build-frenchpress-android.sh.
  * Always re-staged (like cacio/sk-bootstrap) so a rebuilt jar propagates next launch.
