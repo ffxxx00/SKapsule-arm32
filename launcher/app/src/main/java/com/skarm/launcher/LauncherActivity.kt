@@ -301,12 +301,6 @@ class LauncherActivity : AppCompatActivity() {
     private fun ensureRuntime() {
         val jreReady = JreInstaller.isInstalled(this)
         val lwjglReady = LwjglInstaller.isInstalled(this)
-        val skBootstrapped = SkInstaller.isBootstrapped(this)
-        if (jreReady && lwjglReady && skBootstrapped) {
-            Log.i(TAG, "Runtime already installed (jre=$jreReady lwjgl=$lwjglReady sk=$skBootstrapped)")
-            setButtonsEnabled(true)
-            return
-        }
 
         setButtonsEnabled(false)
         binding.setupGroup.visibility = View.VISIBLE
@@ -320,7 +314,8 @@ class LauncherActivity : AppCompatActivity() {
                     }
                     if (!jreReady) JreInstaller.install(this@LauncherActivity, report)
                     if (!lwjglReady) LwjglInstaller.install(this@LauncherActivity, report)
-                    if (!skBootstrapped) SkInstaller.bootstrap(this@LauncherActivity, report)
+                    // Refresh the bundled bootstrap even when game data already exists.
+                    SkInstaller.bootstrap(this@LauncherActivity, report)
                 }
                 binding.setupGroup.visibility = View.GONE
                 setButtonsEnabled(true)
