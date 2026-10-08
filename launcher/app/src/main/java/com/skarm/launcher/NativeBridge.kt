@@ -18,6 +18,7 @@ object NativeBridge {
     external fun onSurfaceCreated(surface: Surface)
     external fun onSurfaceChanged(width: Int, height: Int)
     external fun onSurfaceDestroyed()
+    external fun setSwapInterval(interval: Int)
 
     /**
      * Spins up the JVM on its own pthread and returns immediately since JVM init happens async.

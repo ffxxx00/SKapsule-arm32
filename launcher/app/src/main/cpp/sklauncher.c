@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -50,6 +51,14 @@ static struct {
 // Serializes surface lifecycle (UI thread create/destroy) against the render
 // thread's bind/swap, so a background teardown can't free a surface mid-eglSwapBuffers.
 static pthread_mutex_t egl_lock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_int requested_swap_interval = ATOMIC_VAR_INIT(1);
+static atomic_uint surface_generation = ATOMIC_VAR_INIT(0);
+static int applied_swap_interval = -1; // Render thread only.
+
+JNIEXPORT void JNICALL Java_com_skarm_launcher_NativeBridge_setSwapInterval(
+        JNIEnv *env, jobject thiz, jint interval) {
+    atomic_store(&requested_swap_interval, interval == 0 ? 0 : 1);
+}
 
 // Signaled (under egl_lock) by egl_bring_up when a window surface becomes
 // available. Lets SK's render thread park in glfw_make_current_impl when it
@@ -233,6 +242,7 @@ static bool egl_bring_up(void) {
     // Hand the (new) surface to SK's render thread to make current on its next frame,
     // and wake any render thread parked in glfw_make_current_impl waiting for it.
     atomic_store(&gfx.surface_dirty, 1);
+    atomic_fetch_add(&surface_generation, 1);
     pthread_cond_broadcast(&egl_surface_ready);
     ok = true;
 out:
@@ -245,6 +255,7 @@ static bool egl_make_current_on_caller_thread(void) {
         LOGE("eglMakeCurrent (caller thread) failed: %s", egl_err_str(eglGetError()));
         return false;
     }
+    applied_swap_interval = -1;
     // SK calls glfwMakeContextCurrent several times at startup (and we bind twice per
     // call around gl4es bring-up), so log the make-current banner + invariant GL identity
     // only once. Multitask-resume re-binds are logged separately (render_thread_rebind_if_dirty).
@@ -305,6 +316,7 @@ static void render_thread_rebind_if_dirty(void) {
         LOGW("rebind eglMakeCurrent failed: %s", egl_err_str(eglGetError()));
         atomic_store(&gfx.surface_dirty, 1); // try again next frame
     } else if (gfx.surface != EGL_NO_SURFACE) {
+        applied_swap_interval = -1;
         LOGI("EGL surface (re)bound on render tid=%ld surface=%p",
              (long)pthread_self(), gfx.surface);
     }
@@ -1139,21 +1151,50 @@ static void log_frame_state(void) {
 }
 #endif
 
+static double clock_ms(clockid_t clock) {
+    struct timespec value;
+    clock_gettime(clock, &value);
+    return value.tv_sec * 1000.0 + value.tv_nsec / 1000000.0;
+}
+
 static void JNICALL glfw_swap_buffers_impl(JNIEnv *env, jclass thiz, jlong window) {
+    static double last_end, last_cpu, elapsed, cpu_total, swap_total, longest;
+    static unsigned frames;
+    static unsigned last_generation;
+    bool reset_metrics = atomic_load(&gfx.surface_dirty) != 0;
     // Pick up a surface that changed while we were backgrounded (Android resume).
     render_thread_rebind_if_dirty();
     bool swapped = false;
     pthread_mutex_lock(&egl_lock);
     while (gfx.surface == EGL_NO_SURFACE) {
+        reset_metrics = true;
         pthread_cond_wait(&egl_surface_ready, &egl_lock);
         pthread_mutex_unlock(&egl_lock);
         render_thread_rebind_if_dirty();
         pthread_mutex_lock(&egl_lock);
     }
+    double swap_ms = 0;
+    unsigned generation = atomic_load(&surface_generation);
+    if (generation != last_generation) reset_metrics = true;
+    last_generation = generation;
+    int width = gfx.width, height = gfx.height;
     if (gfx.display != EGL_NO_DISPLAY && gfx.surface != EGL_NO_SURFACE) {
+        int interval = atomic_load(&requested_swap_interval);
+        if (interval != applied_swap_interval) {
+            EGLint minimum = 0, maximum = 0;
+            eglGetConfigAttrib(gfx.display, gfx.config, EGL_MIN_SWAP_INTERVAL, &minimum);
+            eglGetConfigAttrib(gfx.display, gfx.config, EGL_MAX_SWAP_INTERVAL, &maximum);
+            if (eglSwapInterval(gfx.display, interval)) {
+                applied_swap_interval = interval;
+                LOGI("Android swap interval requested=%d config-range=%d..%d", interval, minimum, maximum);
+            } else {
+                LOGW("eglSwapInterval failed: %s", egl_err_str(eglGetError()));
+            }
+        }
 #if defined(__arm__)
         log_frame_state();
 #endif
+        double swap_start = clock_ms(CLOCK_MONOTONIC);
         if (!eglSwapBuffers(gfx.display, gfx.surface)) {
             EGLint err = eglGetError();
             if (err != EGL_BAD_SURFACE) {
@@ -1162,8 +1203,33 @@ static void JNICALL glfw_swap_buffers_impl(JNIEnv *env, jclass thiz, jlong windo
         } else {
             swapped = true;
         }
+        swap_ms = clock_ms(CLOCK_MONOTONIC) - swap_start;
     }
     pthread_mutex_unlock(&egl_lock);
+
+    double end = clock_ms(CLOCK_MONOTONIC), cpu = clock_ms(CLOCK_THREAD_CPUTIME_ID);
+    if (reset_metrics || !swapped) {
+        elapsed = cpu_total = swap_total = longest = 0;
+        frames = 0;
+        last_end = 0;
+    }
+    if (last_end > 0 && swapped) {
+        double duration = end - last_end;
+        elapsed += duration;
+        cpu_total += cpu - last_cpu;
+        swap_total += swap_ms;
+        if (duration > longest) longest = duration;
+        frames++;
+        if (elapsed >= 10000) {
+            LOGI("Performance: frames=%u fps=%.1f frameMs=%.2f renderThreadCpuMs=%.2f swapMs=%.2f maxFrameMs=%.2f size=%dx%d requestedInterval=%d",
+                 frames, frames * 1000.0 / elapsed, elapsed / frames, cpu_total / frames,
+                 swap_total / frames, longest, width, height, applied_swap_interval);
+            elapsed = cpu_total = swap_total = longest = 0;
+            frames = 0;
+        }
+    }
+    last_end = swapped ? end : 0;
+    last_cpu = cpu;
 
     // First successful frame: tell the ART boot overlay to dismiss. One-shot; the
     // overlay's own idempotency guard tolerates a stray repeat, but we gate here

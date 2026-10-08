@@ -77,6 +77,8 @@ class GameActivity :
     // from the first surfaceChanged before any fixed size is applied; currentBuffer* is
     // the size the buffer is actually running at (== the values pushed to native).
     private var renderScale = 1.0f
+    private var performanceResolution = false
+    private var androidVsync = true
     private var fullSurfaceWidth = 0
     private var fullSurfaceHeight = 0
     private var currentBufferWidth = 0
@@ -208,7 +210,14 @@ class GameActivity :
         refreshGamepadPresence()
 
         binding.btnKeyboard.setOnClickListener { toggleSoftKeyboard() }
-        binding.btnEditLayout.setOnClickListener { binding.touchOverlay.toggleEditMode() }
+        binding.btnEditLayout.setOnClickListener {
+            if (binding.touchOverlay.isEditing) binding.touchOverlay.toggleEditMode()
+            else showPerformanceSettings()
+        }
+        val performancePrefs = getSharedPreferences("performance", MODE_PRIVATE)
+        performanceResolution = performancePrefs.getBoolean("resolution600", !Process.is64Bit())
+        androidVsync = performancePrefs.getBoolean("vsync", Process.is64Bit())
+        NativeBridge.setSwapInterval(if (androidVsync) 1 else 0)
 
         // Resolution slider: apply the persisted scale on launch, and re-apply live.
         renderScale = binding.touchOverlay.currentRenderScale()
@@ -770,11 +779,44 @@ class GameActivity :
      * [renderScale] × the native size and the compositor upscales it — the HUD/UI
      * grows without a game restart. A scale of 1.0 restores the native buffer.
      */
+    private fun showPerformanceSettings() {
+        val options = arrayOf(
+            getString(R.string.performance_resolution),
+            getString(R.string.performance_editor_scale),
+            getString(if (androidVsync) R.string.performance_vsync_on else R.string.performance_vsync_off),
+            getString(R.string.performance_edit_controls),
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.performance_title, currentBufferWidth, currentBufferHeight))
+            .setItems(options) { _, which ->
+                when (which) {
+                    0, 1 -> {
+                        performanceResolution = which == 0
+                        getSharedPreferences("performance", MODE_PRIVATE).edit()
+                            .putBoolean("resolution600", performanceResolution).apply()
+                        applyRenderScale()
+                    }
+                    2 -> {
+                        androidVsync = !androidVsync
+                        getSharedPreferences("performance", MODE_PRIVATE).edit()
+                            .putBoolean("vsync", androidVsync).apply()
+                        NativeBridge.setSwapInterval(if (androidVsync) 1 else 0)
+                    }
+                    3 -> binding.touchOverlay.toggleEditMode()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun applyRenderScale() {
         if (fullSurfaceWidth == 0 || fullSurfaceHeight == 0) return
-        val targetW = max(1, (fullSurfaceWidth * renderScale).roundToInt())
-        val targetH = max(1, (fullSurfaceHeight * renderScale).roundToInt())
+        // Keep enough vertical space for SK's login and character-selection UI.
+        val scale = if (performanceResolution) minOf(renderScale, 600f / fullSurfaceHeight) else renderScale
+        val targetW = max(1, (fullSurfaceWidth * scale).roundToInt())
+        val targetH = max(1, (fullSurfaceHeight * scale).roundToInt())
         if (targetW == currentBufferWidth && targetH == currentBufferHeight) return
+        Log.i(TAG, "Render resolution: ${targetW}x${targetH}, performance=$performanceResolution")
         fixedSizeApplied = true
         surface.holder.setFixedSize(targetW, targetH)
     }

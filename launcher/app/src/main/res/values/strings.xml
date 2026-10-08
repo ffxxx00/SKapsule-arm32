@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="performance_title">Performance — %1$d × %2$d</string>
+    <string name="performance_resolution">Reduce resolution (up to 600p)</string>
+    <string name="performance_editor_scale">Use control editor resolution</string>
+    <string name="performance_vsync_on">Android VSync: ON — tap to disable</string>
+    <string name="performance_vsync_off">Android VSync: OFF — tap to enable</string>
+    <string name="performance_edit_controls">Edit controls and resolution scale</string>
     <string name="app_name">SKapsule</string>
     <string name="play_web">Play (Web)</string>
     <string name="play_steam">Play (Steam)</string>

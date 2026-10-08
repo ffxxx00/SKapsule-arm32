@@ -121,6 +121,24 @@ Build with `-PskJvmInterpreted=false` (default), and verify the release using
 `-PskJvmInterpreted=true` build remains available for diagnostics. Device stability
 and playable performance with C1 are still unverified.
 
+The user subsequently confirmed playable gameplay with C1 (about 5 FPS in-world).
+Experimental 13 keeps C1 and defaults ARM32 to a 600-pixel render-height cap and
+an Android EGL swap-interval request of zero. On the A13 this reduces the previous
+1445x648 buffer to approximately 1338x600 (14% fewer pixels). The gear button now
+opens performance settings: choose the cap or the existing control-editor scale,
+toggle Android VSync, or open the control editor. These choices persist. The game's
+desktop VSync option remains separate; its GLFW stub still ignores swap intervals.
+EGL may clamp the requested interval to its supported range, which is logged.
+
+Every ten seconds of presented frames the native bridge logs average FPS, frame
+duration, render-thread CPU time, time inside eglSwapBuffers, the longest frame,
+resolution and requested interval. Surface recreation resets the sample so time
+spent backgrounded is excluded. Swap duration is not a GPU timer and render-thread
+CPU includes native graphics work, not just Java. These measurements identify where
+to investigate; they do not prove a GPU or CPU bottleneck on their own. Device FPS
+gains and layout at 600p still need validation; the editor-scale option restores
+the previous resolution policy without reinstalling.
+
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
 `LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with
