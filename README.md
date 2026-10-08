@@ -68,6 +68,9 @@ and disables the upstream ARM64-only APK updater.
 The ARM32 build replaces FCL's mismatched AArch64 AWT placeholder with a locally
 built JNI stub linked to the ARM32 headless AWT library. It omits the AArch64
 `jspawnhelper` from the common image and uses Java's `FORK` process mechanism.
+It caps multi-release JAR selection at Java 17 with `jdk.util.jar.version=17`,
+so LWJGL uses its JNI bindings rather than the Java 25 FFM linker unsupported
+by this ARM32 runtime. Java itself remains version 25.
 
 For an interpreter-only diagnostic APK, add `-PskJvmInterpreted=true` to the
 ARM32 Gradle build. This disables Java JIT for that build and can be much slower;

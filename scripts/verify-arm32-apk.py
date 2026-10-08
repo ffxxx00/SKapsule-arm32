@@ -25,6 +25,7 @@ with zipfile.ZipFile(apk) as archive:
     assert 'lib/armeabi-v7a/libc++_shared.so' in names
     assert 'lib/armeabi-v7a/libsklauncher.so' in names
     assert 'lib/armeabi-v7a/libawt_xawt.so' in names
+    assert b'-Djdk.util.jar.version=17\x00' in archive.read('lib/armeabi-v7a/libsklauncher.so'), 'ARM32 must select JNI instead of the Java 25 FFM layer'
     assert not any(n.startswith('assets/jre25/') for n in names)
     assert not any('natives-arm64.zip' in n for n in names)
     with tarfile.open(fileobj=io.BytesIO(archive.read('assets/jre25-arm32/bin-arm.tar.xz'))) as runtime:

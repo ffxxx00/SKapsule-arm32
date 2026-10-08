@@ -820,6 +820,8 @@ static void *jvm_thread_main(void *arg) {
     ADD_OPT("--enable-native-access=ALL-UNNAMED");
     ADD_OPT("-XX:-CreateCoredumpOnCrash");
 #if defined(__arm__)
+    // LWJGL's Java 25 layer requires an FFM linker unavailable on ARM32.
+    ADD_OPT("-Djdk.util.jar.version=17");
     // FCL's common JRE image ships an AArch64 jspawnhelper; fork avoids it.
     ADD_OPT("-Djdk.lang.Process.launchMechanism=FORK");
 #if defined(SK_ARM32_INTERPRETER_TEST)
