@@ -155,6 +155,12 @@ object JreInstaller {
         }
         val target = File(home, "lib/libGL.so")
         target.parentFile?.mkdirs()
+        if (!Process.is64Bit()) {
+            // The native bridge and LWJGL must share one gl4es instance/state.
+            java.nio.file.Files.deleteIfExists(target.toPath())
+            android.system.Os.symlink(source.absolutePath, target.absolutePath)
+            return
+        }
         source.copyTo(target, overwrite = true)
         target.setReadable(true, false)
         target.setExecutable(true, false)

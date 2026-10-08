@@ -5,6 +5,16 @@ plugins {
     id("com.diffplug.spotless") version "6.25.0"
 }
 
+// Fork-specific JVM checks are packaged by the existing bootstrap build.
+project(":bootstrap") {
+    pluginManager.withPlugin("java") {
+        extensions.configure<JavaPluginExtension> {
+            sourceSets.named("main") { java.srcDir(rootProject.file("runtime/src/main/java")) }
+            sourceSets.named("test") { java.srcDir(rootProject.file("runtime/src/test/java")) }
+        }
+    }
+}
+
 spotless {
     java {
         target(

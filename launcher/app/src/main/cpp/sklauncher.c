@@ -529,6 +529,7 @@ static JavaVM   *g_art_vm;
 static jclass    g_nb_cls;            // NativeBridge, global ref
 static jmethodID g_nb_launch_status;  // onLaunchStatus(Ljava/lang/String;)V
 static jmethodID g_nb_render_ready;   // onRenderReady()V
+static jmethodID g_nb_game_stopped;   // onGameStopped()V
 static jmethodID g_nb_keep_alive;     // steamKeepAlive(Z)V
 static jmethodID g_nb_prompt_device;  // promptForDeviceCode(Z)Ljava/lang/String;
 static jmethodID g_nb_prompt_email;   // promptForEmailCode(Ljava/lang/String;Z)Ljava/lang/String;
@@ -545,6 +546,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
         g_nb_launch_status = (*env)->GetStaticMethodID(env, cls, "onLaunchStatus",
                                                        "(Ljava/lang/String;)V");
         g_nb_render_ready  = (*env)->GetStaticMethodID(env, cls, "onRenderReady", "()V");
+        g_nb_game_stopped  = (*env)->GetStaticMethodID(env, cls, "onGameStopped", "()V");
         g_nb_keep_alive    = (*env)->GetStaticMethodID(env, cls, "steamKeepAlive", "(Z)V");
         g_nb_prompt_device = (*env)->GetStaticMethodID(env, cls, "promptForDeviceCode",
                                                        "(Z)Ljava/lang/String;");
@@ -587,6 +589,13 @@ static void art_render_ready(void) {
     JNIEnv *env = art_env();
     if (!env || !g_nb_cls || !g_nb_render_ready) return;
     (*env)->CallStaticVoidMethod(env, g_nb_cls, g_nb_render_ready);
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+}
+
+static void art_game_stopped(void) {
+    JNIEnv *env = art_env();
+    if (!env || !g_nb_cls || !g_nb_game_stopped) return;
+    (*env)->CallStaticVoidMethod(env, g_nb_cls, g_nb_game_stopped);
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
 }
 
@@ -822,8 +831,12 @@ static void *jvm_thread_main(void *arg) {
 #if defined(__arm__)
     // LWJGL's Java 25 layer requires an FFM linker unavailable on ARM32.
     ADD_OPT("-Djdk.util.jar.version=17");
+    ADD_OPT("-Dorg.lwjgl.opengl.libname=libgl4es.so");
     // Java 25 font shaping also defaults to the unavailable FFM linker.
     ADD_OPT("-Dsun.font.layout.ffm=false");
+    // ARM interpreter math stubs call native helpers; use Java math instead.
+    ADD_OPT("-XX:+UnlockDiagnosticVMOptions");
+    ADD_OPT("-XX:-InlineMathNatives");
     // The bundled Vorbis decoder throws while loading title music on ARM32.
     ADD_OPT("-Ddisable_sound=true");
     // FCL's common JRE image ships an AArch64 jspawnhelper; fork avoids it.
@@ -972,6 +985,22 @@ static void *jvm_thread_main(void *arg) {
         }
     }
 
+#if defined(__arm__)
+    {
+        art_launch_status("Checking runtime…");
+        jclass checks = (*env)->FindClass(env, "com/skarm/launcher/bootstrap/Arm32Checks");
+        if (!checks) { log_pending_exception(env, "ARM32 checks lookup"); goto done; }
+        jmethodID run = (*env)->GetStaticMethodID(env, checks, "run", "()V");
+        if (run) (*env)->CallStaticVoidMethod(env, checks, run);
+        (*env)->DeleteLocalRef(env, checks);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionDescribe(env);
+            (*env)->ExceptionClear(env);
+            LOGE("ARM32 runtime preflight failed; not entering game");
+            goto done;
+        }
+    }
+#endif
     {
         jclass boot = (*env)->FindClass(env, "com/skarm/launcher/bootstrap/SkBootstrap");
         if (!boot) {
@@ -1005,6 +1034,7 @@ static void *jvm_thread_main(void *arg) {
     }
 
 done:
+    art_game_stopped();
     // Leave the VM running for possible multitasking
     return NULL;
 }
@@ -1082,6 +1112,27 @@ static jintArray JNICALL glfw_get_surface_size_impl(JNIEnv *env, jclass thiz) {
     return arr;
 }
 
+#if defined(__arm__)
+static void log_frame_state(void) {
+    static unsigned int frame;
+    ++frame;
+    if (frame != 1 && frame != 30 && frame != 120) return;
+    GLint viewport[4] = {0}, framebuffer = 0, program = 0;
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &framebuffer);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+    // Sample the real GLES surface; do not modify GL state or capture user text.
+    unsigned char pixel[4] = {0};
+    if (framebuffer == 0 && viewport[2] > 0 && viewport[3] > 0) {
+        glReadPixels(viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2,
+                     1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+    }
+    LOGI("Frame %u: viewport=%d,%d,%d,%d fbo=%d program=%d center=%u,%u,%u,%u",
+         frame, viewport[0], viewport[1], viewport[2], viewport[3], framebuffer, program,
+         pixel[0], pixel[1], pixel[2], pixel[3]);
+}
+#endif
+
 static void JNICALL glfw_swap_buffers_impl(JNIEnv *env, jclass thiz, jlong window) {
     // Pick up a surface that changed while we were backgrounded (Android resume).
     render_thread_rebind_if_dirty();
@@ -1094,6 +1145,9 @@ static void JNICALL glfw_swap_buffers_impl(JNIEnv *env, jclass thiz, jlong windo
         pthread_mutex_lock(&egl_lock);
     }
     if (gfx.display != EGL_NO_DISPLAY && gfx.surface != EGL_NO_SURFACE) {
+#if defined(__arm__)
+        log_frame_state();
+#endif
         if (!eglSwapBuffers(gfx.display, gfx.surface)) {
             EGLint err = eglGetError();
             if (err != EGL_BAD_SURFACE) {
@@ -1259,8 +1313,24 @@ Java_com_skarm_launcher_bootstrap_SkBootstrap_registerGlfwNatives(JNIEnv *env, j
         LOGE("RegisterNatives on SK GLFW failed: rc=%d", rc);
     } else {
         LOGI("RegisterNatives on SK GLFW OK (%zu methods)", sizeof(m)/sizeof(m[0]));
-        art_launch_status("Starting game…");
 #if defined(__arm__)
+        art_launch_status("Checking game resources…");
+        jclass checks = (*env)->FindClass(env, "com/skarm/launcher/bootstrap/Arm32Checks");
+        jclass class_type = (*env)->GetObjectClass(env, glfwClass);
+        jmethodID get_loader = (*env)->GetMethodID(env, class_type, "getClassLoader", "()Ljava/lang/ClassLoader;");
+        jobject loader = get_loader ? (*env)->CallObjectMethod(env, glfwClass, get_loader) : NULL;
+        if (checks && loader && !(*env)->ExceptionCheck(env)) {
+            jmethodID check = (*env)->GetStaticMethodID(env, checks, "checkGameResources", "(Ljava/lang/ClassLoader;Ljava/lang/String;)V");
+            char game_dir[1300];
+            snprintf(game_dir, sizeof game_dir, "%s/sk", jvm.app_files);
+            jstring path = (*env)->NewStringUTF(env, game_dir);
+            if (check) (*env)->CallStaticVoidMethod(env, checks, check, loader, path);
+            (*env)->DeleteLocalRef(env, path);
+        }
+        log_pending_exception(env, "Game resource checks");
+        if (loader) (*env)->DeleteLocalRef(env, loader);
+        if (checks) (*env)->DeleteLocalRef(env, checks);
+        (*env)->DeleteLocalRef(env, class_type);
         JavaVM *vm = NULL;
         if ((*env)->GetJavaVM(env, &vm) == JNI_OK) {
             pthread_t diagnostic;
@@ -1269,6 +1339,7 @@ Java_com_skarm_launcher_bootstrap_SkBootstrap_registerGlfwNatives(JNIEnv *env, j
             else LOGW("Could not start JVM diagnostic: %s", strerror(error));
         }
 #endif
+        art_launch_status("Starting game…");
     }
 }
 

@@ -90,6 +90,24 @@ Experimental 9 selects JNI font shaping with `sun.font.layout.ffm=false` on ARM3
 Experimental 8 presented its first frame but then aborted in `HBShaper` because
 Java 25's default font layout path also requires the unavailable FFM linker.
 
+Experimental 10 consolidates the ARM32 startup review. LWJGL explicitly loads
+`libgl4es.so`; the JRE's `libGL.so` is an alias of that same file instead of a
+second copy. Interpreter math uses Java implementations with
+`-XX:-InlineMathNatives` to avoid ARM native math stubs. This is a targeted
+workaround for the observed decoder/blank-interface failures, pending device
+confirmation, not a verified repair of the bundled JVM.
+
+Before launch, the embedded JVM checks math, direct buffers, PNG alpha and font
+rasterization. Fork-specific JVM sources live in `launcher/runtime/` and are
+included in the existing bootstrap module by `launcher/build.gradle.kts`.
+The two OGG files that previously failed are decoded before game startup; audio
+is enabled only if both checks succeed on the device, otherwise silent mode stays
+active. The optional Discord desktop integration is disabled at launch because it also
+requires FFM. If the game main method exits, the launcher shows a stopped-game
+dialog with log sharing. Logs include the APK version and three frame-state
+samples. The release remains interpreted; actual login, character
+selection and gameplay on the A13 still require device testing.
+
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
 `LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with

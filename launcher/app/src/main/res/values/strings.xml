@@ -78,4 +78,6 @@
     <string name="mod_removed">Mods removed successfully!\nUnpacked %1$d resources.</string>
     <string name="mod_failed">Operation failed: %1$s</string>
     <string name="update_downloading">Updating SKapsule</string>
+    <string name="game_stopped_title">Game stopped</string>
+    <string name="game_stopped_message">The game has stopped running. Share the log to diagnose the problem, or exit and try again.</string>
 </resources>

@@ -829,6 +829,18 @@ class GameActivity :
         }
     }
 
+    override fun onGameStopped() {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            AlertDialog.Builder(this)
+                .setTitle(R.string.game_stopped_title)
+                .setMessage(R.string.game_stopped_message)
+                .setPositiveButton(R.string.share_logs) { _, _ -> LogExporter.captureAndShare(this) }
+                .setNegativeButton(R.string.exit_confirm_yes) { _, _ -> shutdownGame() }
+                .show()
+        }
+    }
+
     // --- NativeBridge.CredentialListener (called from the JVM login thread) ---
 
     /**

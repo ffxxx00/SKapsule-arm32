@@ -54,7 +54,13 @@ object LogExporter {
         val process = ProcessBuilder("logcat", "-d", "-v", "threadtime")
             .redirectErrorStream(true)
             .start()
-        out.outputStream().use { sink -> process.inputStream.copyTo(sink) }
+        out.outputStream().use { sink ->
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val code = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
+            sink.write(("SKapsule ${info.versionName} ($code); " +
+                "64-bit process=${android.os.Process.is64Bit()}\n").toByteArray())
+            process.inputStream.copyTo(sink)
+        }
         process.waitFor()
         prune(context)
         if (out.length() > 0L) {

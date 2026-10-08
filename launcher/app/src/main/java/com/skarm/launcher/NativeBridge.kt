@@ -93,6 +93,7 @@ object NativeBridge {
     interface BootListener {
         fun onLaunchStatus(message: String)
         fun onRenderReady()
+        fun onGameStopped()
     }
 
     @Volatile
@@ -112,6 +113,11 @@ object NativeBridge {
     @JvmStatic
     fun onRenderReady() {
         bootListener?.onRenderReady()
+    }
+
+    @JvmStatic
+    fun onGameStopped() {
+        bootListener?.onGameStopped()
     }
 
     // --- JVM/native -> Android Steam-login keep-alive --------------------------
