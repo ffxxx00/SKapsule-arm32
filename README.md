@@ -86,6 +86,9 @@ credential store, so saved Steam tokens cannot override the selected login mode.
 Experimental 8 disables game audio on ARM32 with `disable_sound=true` to bypass
 an array-bounds exception in the bundled Vorbis decoder during title music
 loading. This is a silent startup workaround; the decoder remains unresolved.
+Experimental 9 selects JNI font shaping with `sun.font.layout.ffm=false` on ARM32.
+Experimental 8 presented its first frame but then aborted in `HBShaper` because
+Java 25's default font layout path also requires the unavailable FFM linker.
 
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with

@@ -822,6 +822,8 @@ static void *jvm_thread_main(void *arg) {
 #if defined(__arm__)
     // LWJGL's Java 25 layer requires an FFM linker unavailable on ARM32.
     ADD_OPT("-Djdk.util.jar.version=17");
+    // Java 25 font shaping also defaults to the unavailable FFM linker.
+    ADD_OPT("-Dsun.font.layout.ffm=false");
     // The bundled Vorbis decoder throws while loading title music on ARM32.
     ADD_OPT("-Ddisable_sound=true");
     // FCL's common JRE image ships an AArch64 jspawnhelper; fork avoids it.
