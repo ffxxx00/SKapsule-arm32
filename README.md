@@ -108,6 +108,19 @@ dialog with log sharing. Logs include the APK version and three frame-state
 samples. The release remains interpreted; actual login, character
 selection and gameplay on the A13 still require device testing.
 
+The user confirmed visible login and working sound in experimental 11, but world
+loading and UI updates were extremely slow under `-Xint`. Thread snapshots show
+Java resource decoding and dependency traversal on the render thread. Experimental
+12 enables C1 tier 1 compilation (`-Xmixed -XX:+TieredCompilation
+-XX:TieredStopAtLevel=1`) while retaining disabled math intrinsics and the JNI
+compatibility fixes. It excludes C2 as a controlled trial; the earlier JIT stall
+has not been conclusively attributed to C2. Preflight now repeats numeric checks
+across warmup and reports effective compiler flags and compilation time.
+Build with `-PskJvmInterpreted=false` (default), and verify the release using
+`python scripts/verify-arm32-apk.py path/to.apk --expect-c1`. The explicit
+`-PskJvmInterpreted=true` build remains available for diagnostics. Device stability
+and playable performance with C1 are still unverified.
+
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
 `LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with

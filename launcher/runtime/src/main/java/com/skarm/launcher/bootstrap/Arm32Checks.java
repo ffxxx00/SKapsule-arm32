@@ -19,7 +19,14 @@ public final class Arm32Checks {
     private Arm32Checks() {}
 
     public static void run() throws Exception {
+        var vm = java.lang.management.ManagementFactory.getPlatformMXBean(
+                com.sun.management.HotSpotDiagnosticMXBean.class);
+        System.out.println("[Arm32Checks] VM mode=" + System.getProperty("java.vm.info")
+                + ", UseCompiler=" + vm.getVMOption("UseCompiler").getValue()
+                + ", TieredStopAtLevel=" + vm.getVMOption("TieredStopAtLevel").getValue()
+                + ", InlineMathNatives=" + vm.getVMOption("InlineMathNatives").getValue());
         checkMath();
+        checkWarmMath();
         checkPixels();
         checkFonts();
         // Discord's optional desktop SDK uses FFM after character selection.
@@ -50,6 +57,25 @@ public final class Arm32Checks {
         if (!Double.isFinite(actual) || difference < -0.000001 || difference > 0.000001) {
             throw new IllegalStateException(name + ": expected " + expected + ", got " + actual);
         }
+    }
+
+    public static void checkWarmMath() {
+        // Repeated calls exercise transitions from interpreted to compiled code.
+        long start = System.nanoTime();
+        for (int i = 0; i < 20000; i++) checkMathInput((i & 15) + 1.0);
+        var compiler = java.lang.management.ManagementFactory.getCompilationMXBean();
+        System.out.println("[Arm32Checks] warm math PASS: elapsedMs="
+                + (System.nanoTime() - start) / 1_000_000L + ", compiler="
+                + (compiler == null ? "none" : compiler.getName())
+                + ", compilationMs=" + (compiler == null || !compiler.isCompilationTimeMonitoringSupported()
+                ? -1 : compiler.getTotalCompilationTime()));
+    }
+
+    private static void checkMathInput(double value) {
+        near("warm pow", Math.pow(value, 2.0), value * value);
+        near("warm sqrt", Math.sqrt(value * value), value);
+        near("warm sin", Math.sin(value) * Math.sin(value) + Math.cos(value) * Math.cos(value), 1.0);
+        near("warm bits", Double.longBitsToDouble(Double.doubleToRawLongBits(value)), value);
     }
 
     public static void checkPixels() throws Exception {

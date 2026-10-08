@@ -844,6 +844,12 @@ static void *jvm_thread_main(void *arg) {
 #if defined(SK_ARM32_INTERPRETER_TEST)
     ADD_OPT("-Xint");
     LOGI("ARM32 diagnostic mode: Java JIT disabled (-Xint)");
+#else
+    // Isolate C1 from the higher-tier compiler used in earlier stalled builds.
+    ADD_OPT("-Xmixed");
+    ADD_OPT("-XX:+TieredCompilation");
+    ADD_OPT("-XX:TieredStopAtLevel=1");
+    LOGI("ARM32 runtime mode: C1 JIT only (tier 1), math intrinsics disabled");
 #endif
 #else
     ADD_OPT("-XX:+SuppressFatalErrorMessage");

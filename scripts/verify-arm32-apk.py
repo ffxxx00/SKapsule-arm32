@@ -27,6 +27,10 @@ with zipfile.ZipFile(apk) as archive:
     assert 'lib/armeabi-v7a/libawt_xawt.so' in names
     assert b'-Djdk.util.jar.version=17\x00' in archive.read('lib/armeabi-v7a/libsklauncher.so'), 'ARM32 must select JNI instead of the Java 25 FFM layer'
     launcher = archive.read('lib/armeabi-v7a/libsklauncher.so')
+    if '--expect-c1' in sys.argv:
+        for option in [b'-Xmixed', b'-XX:+TieredCompilation', b'-XX:TieredStopAtLevel=1']:
+            assert option + b'\x00' in launcher, 'Missing C1 option: ' + repr(option)
+        assert b'-Xint\x00' not in launcher, 'C1 build still forces the interpreter'
     for option in [b'-Dsun.font.layout.ffm=false', b'-Dorg.lwjgl.opengl.libname=libgl4es.so',
                    b'-XX:-InlineMathNatives']:
         assert option + b'\x00' in launcher, 'Missing ARM32 compatibility option: ' + repr(option)
