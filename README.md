@@ -69,6 +69,11 @@ The ARM32 build replaces FCL's mismatched AArch64 AWT placeholder with a locally
 built JNI stub linked to the ARM32 headless AWT library. It omits the AArch64
 `jspawnhelper` from the common image and uses Java's `FORK` process mechanism.
 
+For an interpreter-only diagnostic APK, add `-PskJvmInterpreted=true` to the
+ARM32 Gradle build. This disables Java JIT for that build and can be much slower;
+normal builds keep JIT enabled. Stalled startup logs also include native thread
+snapshots and the stage reached by the HotSpot thread-dump collector.
+
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
 `LWJGL_BUILD_ARCH=arm32` and `bash scripts/stage-arm32-jre.sh`. Assemble with

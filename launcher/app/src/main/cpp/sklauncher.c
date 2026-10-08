@@ -822,6 +822,10 @@ static void *jvm_thread_main(void *arg) {
 #if defined(__arm__)
     // FCL's common JRE image ships an AArch64 jspawnhelper; fork avoids it.
     ADD_OPT("-Djdk.lang.Process.launchMechanism=FORK");
+#if defined(SK_ARM32_INTERPRETER_TEST)
+    ADD_OPT("-Xint");
+    LOGI("ARM32 diagnostic mode: Java JIT disabled (-Xint)");
+#endif
 #else
     ADD_OPT("-XX:+SuppressFatalErrorMessage");
 #endif
@@ -1151,6 +1155,32 @@ static jboolean JNICALL glfw_get_gamepad_state_impl(JNIEnv *env, jclass thiz,
 }
 
 // Capture the embedded JVM, not ART: Android's thread dump cannot show SK stacks.
+static void dump_native_threads(void) {
+    DIR *tasks = opendir("/proc/self/task");
+    if (!tasks) { LOGW("Native thread snapshot failed: %s", strerror(errno)); return; }
+    struct dirent *task;
+    while ((task = readdir(tasks))) {
+        if (task->d_name[0] < '0' || task->d_name[0] > '9') continue;
+        char path[384], stat[2048], wchan[256] = "unavailable";
+        snprintf(path, sizeof path, "/proc/self/task/%s/stat", task->d_name);
+        FILE *file = fopen(path, "r");
+        if (!file) continue;
+        bool read = fgets(stat, sizeof stat, file) != NULL;
+        fclose(file);
+        if (!read) continue;
+        stat[strcspn(stat, "\n")] = '\0';
+        snprintf(path, sizeof path, "/proc/self/task/%s/wchan", task->d_name);
+        file = fopen(path, "r");
+        if (file) {
+            (void)fgets(wchan, sizeof wchan, file);
+            fclose(file);
+        }
+        wchan[strcspn(wchan, "\n")] = '\0';
+        LOGI("Native thread stat: %s; wchan=%s", stat, wchan);
+    }
+    closedir(tasks);
+}
+
 static void *dump_stalled_startup(void *arg) {
     JavaVM *vm = arg;
     sleep(60);
@@ -1158,20 +1188,28 @@ static void *dump_stalled_startup(void *arg) {
     JNIEnv *env = NULL;
     if ((*vm)->AttachCurrentThreadAsDaemon(vm, (void **)&env, NULL) != JNI_OK) return NULL;
     LOGI("Startup diagnostic: no game frame after 60 seconds; dumping HotSpot threads");
+    dump_native_threads();
+    sleep(5);
+    dump_native_threads();
     jclass factory = (*env)->FindClass(env, "java/lang/management/ManagementFactory");
     if (!factory) goto done;
+    LOGI("Startup diagnostic: ManagementFactory loaded");
     jmethodID get = (*env)->GetStaticMethodID(env, factory, "getThreadMXBean",
                                             "()Ljava/lang/management/ThreadMXBean;");
     if (!get) goto done;
+    LOGI("Startup diagnostic: obtaining ThreadMXBean");
     jobject bean = (*env)->CallStaticObjectMethod(env, factory, get);
     if ((*env)->ExceptionCheck(env) || !bean) goto done;
+    LOGI("Startup diagnostic: ThreadMXBean obtained");
     jclass beancls = (*env)->FindClass(env, "java/lang/management/ThreadMXBean");
     if (!beancls) goto done;
     jmethodID dump = (*env)->GetMethodID(env, beancls, "dumpAllThreads",
                                        "(ZZ)[Ljava/lang/management/ThreadInfo;");
     if (!dump) goto done;
+    LOGI("Startup diagnostic: calling dumpAllThreads");
     jobjectArray threads = (*env)->CallObjectMethod(env, bean, dump, JNI_TRUE, JNI_TRUE);
     if ((*env)->ExceptionCheck(env) || !threads) goto done;
+    LOGI("Startup diagnostic: dumpAllThreads returned %d threads", (*env)->GetArrayLength(env, threads));
     jclass info = (*env)->FindClass(env, "java/lang/management/ThreadInfo");
     if (!info) goto done;
     jmethodID string = (*env)->GetMethodID(env, info, "toString", "()Ljava/lang/String;");

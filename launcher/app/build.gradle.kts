@@ -71,6 +71,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DANDROID_STL=c++_shared")
+                arguments += "-DSK_ARM32_INTERPRETER_TEST=${providers.gradleProperty("skJvmInterpreted").getOrElse("false")}"
                 cppFlags += "-std=c++17"
             }
         }

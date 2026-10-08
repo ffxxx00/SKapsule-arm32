@@ -20,6 +20,11 @@ add_library(sklauncher SHARED
     sklauncher.c
 )
 
+option(SK_ARM32_INTERPRETER_TEST "Disable JIT for ARM32 startup diagnosis" OFF)
+if(SK_ARM32_INTERPRETER_TEST AND ANDROID_ABI STREQUAL "armeabi-v7a")
+    target_compile_definitions(sklauncher PRIVATE SK_ARM32_INTERPRETER_TEST)
+endif()
+
 find_library(log-lib log)
 find_library(android-lib android)
 find_library(egl-lib EGL)
