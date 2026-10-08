@@ -83,6 +83,9 @@ startup with the combined workaround still needs device testing.
 Experimental 7 also loads the existing frenchpress shim in ARM32 Web mode to
 avoid the game's SteamAPI FFM initializer. Web mode uses `/dev/null` as its Steam
 credential store, so saved Steam tokens cannot override the selected login mode.
+Experimental 8 disables game audio on ARM32 with `disable_sound=true` to bypass
+an array-bounds exception in the bundled Vorbis decoder during title music
+loading. This is a silent startup workaround; the decoder remains unresolved.
 
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
