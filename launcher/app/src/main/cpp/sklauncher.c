@@ -934,7 +934,8 @@ static void *jvm_thread_main(void *arg) {
                                                   "(Ljava/lang/String;)Ljava/lang/String;");
     if (!getprop) { LOGE("GetStaticMethodID getProperty failed"); goto done; }
 
-    const char *keys[] = { "java.version", "java.vm.name", "java.home", "os.arch" };
+    const char *keys[] = { "java.version", "java.vm.name", "java.vm.info",
+                           "java.home", "os.arch", "jdk.util.jar.version" };
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
         jstring key = (*env)->NewStringUTF(env, keys[i]);
         jstring val = (jstring)(*env)->CallStaticObjectMethod(env, system, getprop, key);

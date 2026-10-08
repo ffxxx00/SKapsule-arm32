@@ -76,6 +76,10 @@ For an interpreter-only diagnostic APK, add `-PskJvmInterpreted=true` to the
 ARM32 Gradle build. This disables Java JIT for that build and can be much slower;
 normal builds keep JIT enabled. Stalled startup logs also include native thread
 snapshots and the stage reached by the HotSpot thread-dump collector.
+Experimental 6 combines this interpreter mode with the JNI layer selection above:
+experimental 5 stalled with JIT enabled before producing a game frame, while the
+earlier interpreter trial reached an exception in LWJGL's FFM layer. Full game
+startup with the combined workaround still needs device testing.
 
 To build ARM32, run the native build scripts with `ABIS=armeabi-v7a` and
 `LWJGL_BUILD_ARCH=arm32`, then run `scripts/stage-launcher-assets.sh` with
